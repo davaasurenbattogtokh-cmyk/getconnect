@@ -33,11 +33,11 @@ Set local runtime values in an untracked `.dev.vars` file using the key names fr
 
 ## Configuration
 
-Sites provisions `DB` and `BUCKET` through `.openai/hosting.json`. Schema migrations live under `drizzle/`.
+The Vite/Cloudflare configuration declares the `DB` and `BUCKET` bindings for local development. Schema migrations live under `drizzle/`. The production preparation script supplies the identifiers of your own provisioned resources.
 
-The site deploys owner-private and preserves the Sites/ChatGPT outer access boundary. Application administration uses the explicit username/password login at `/admin/login`; Footer **Admin** opens it. Runtime secrets `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` configure credentials. The password hash format is `pbkdf2-sha256$100000$<32-hex-salt>$<64-hex-hash>`. Passwords never appear in source or browser bundles.
+Application administration uses the explicit username/password login at `/admin/login`; Footer **Admin** opens it. Runtime secrets `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` configure credentials. The password hash format is `pbkdf2-sha256$100000$<32-hex-salt>$<64-hex-hash>`. Passwords never appear in source or browser bundles.
 
-Authenticated sessions use random 256-bit tokens; D1 stores only SHA-256 token hashes, with an eight-hour expiry. Cookies are HttpOnly, SameSite=Strict, host-only and Secure on HTTPS. Logout revokes the stored session. Login attempts are limited to ten per fifteen-minute IP window. Every protected API authorizes the session server-side; platform identity alone never grants application-admin permissions. Existing platform sign-in integration remains intact.
+Authenticated sessions use random 256-bit tokens; D1 stores only SHA-256 token hashes, with an eight-hour expiry. Cookies are HttpOnly, SameSite=Strict, host-only and Secure on HTTPS. Logout revokes the stored session. Login attempts are limited to ten per fifteen-minute IP window. Every protected API authorizes the session server-side; platform identity alone never grants application-admin permissions.
 
 Transactional email uses Resend over HTTPS. Configure the runtime secrets `RESEND_API_KEY` and `MAIL_FROM` (a verified sender), then redeploy. The outbox truthfully remains pending until configured. The admin can retry delivery. Email requests carry stable idempotency keys; notification failure never rolls back registration or approval.
 
@@ -59,7 +59,7 @@ The built asset `participant-kit-web.pdf` is a web-optimized copy of the supplie
 
 ## Independent production deployment: getconnect.business
 
-The existing ChatGPT Site and its stored database/files are separate from a new external deployment. This GitHub repository contains source and schema only, not live participant records, uploaded logos or secret values. Changing source metadata does not change DNS or activate the domain.
+This repository contains application source and schema only, not live participant records, uploaded logos or secret values. A new deployment requires its own database, file bucket and runtime secrets. Changing source metadata does not change DNS or activate the domain.
 
 The current backend is designed for Cloudflare Workers with D1 and R2. A conventional PHP-only shared host or GitHub Pages cannot run the API as-is. A different server requires a backend/storage adaptation.
 
@@ -100,6 +100,6 @@ For an independent Cloudflare deployment:
 
    Use `admin` as the configured username. The password itself is intentionally not stored in this repository. The email service requires a verified sender. Before opening registration, complete the runtime configuration, verify HTTPS on the custom domain and run the complete register → approve → logo publication → email → cancel flow.
 
-6. In `/admin/login`, sign in and enter the public contact information and additional chapter suggestions. On an independent Cloudflare deployment there is no ChatGPT hosting gate; the application-admin password remains required.
+6. In `/admin/login`, sign in and enter the public contact information and additional chapter suggestions. The public website uses the application-admin password to protect organizer functions.
 
 Production references: [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/) and [Worker custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
