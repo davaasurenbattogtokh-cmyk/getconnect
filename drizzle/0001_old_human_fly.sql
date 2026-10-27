@@ -1,1 +1,0 @@
-ALTER TABLE `applications` ADD `decision_key` text DEFAULT '' NOT NULL;

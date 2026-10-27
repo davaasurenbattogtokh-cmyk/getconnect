@@ -12,4 +12,4 @@ export async function verifyPassword(password:string,stored:string){
  const result=new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:unhex(salt),iterations:100000},key,256));
  const wanted=unhex(expected);let diff=0;for(let i=0;i<32;i++)diff|=result[i]^wanted[i];return diff===0;
 }
-export function sessionCookie(token:string,req:Request,clear=false){return `${ADMIN_COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${clear?0:SESSION_SECONDS}${new URL(req.url).protocol==='https:'?'; Secure':''}`;}
+export function sessionCookie(token:string,req:Request,clear=false){return `${ADMIN_COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${clear?0:SESSION_SECONDS}${new URL(process.env.APP_URL||req.url).protocol==='https:'?'; Secure':''}`;}

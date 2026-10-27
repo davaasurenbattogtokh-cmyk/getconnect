@@ -1,3 +1,5 @@
+export const runtime='nodejs';
+export const dynamic='force-dynamic';
 import {bucket,database} from '@/lib/server';
 export async function GET(req:Request,{params}:{params:Promise<{key:string}>}){
  const {key}=await params;if(!/^[\w-]+\.(png|jpg|webp)$/.test(key))return new Response('Not found',{status:404});

@@ -1,13 +1,14 @@
-import { env } from 'cloudflare:workers';
+import {database,bucket} from './mysql';
+export {database,bucket};
+const env=process.env;
 import { headers } from 'next/headers';
 import {money,priceFor,tariffFor} from './expo';
 import {sessionToken,hashToken} from './admin-auth';
-export const database=()=>{if(!env.DB)throw new Error('Database unavailable');return env.DB;};
-export const bucket=()=>{if(!env.BUCKET)throw new Error('File storage unavailable');return env.BUCKET;};
 export class ApiError extends Error{constructor(public status:number,message:string){super(message);}}
 export function respond(data:unknown,status=200){return Response.json(data,{status,headers:{'Cache-Control':'no-store'}});}
 export function fail(e:unknown){if(e instanceof ApiError)return respond({error:e.message},e.status);console.error('Expo request failed',e);return respond({error:'Үйлдлийг гүйцэтгэж чадсангүй. Дахин оролдоно уу.'},500);}
-export function sameOrigin(req:Request){const origin=req.headers.get('origin');if(origin&&origin!==new URL(req.url).origin)throw new ApiError(403,'Зөвшөөрөлгүй хүсэлт.');}
+export function requestOrigin(req:Request){return new URL(process.env.APP_URL||req.url).origin;}
+export function sameOrigin(req:Request){const origin=req.headers.get('origin');if(origin&&origin!==requestOrigin(req))throw new ApiError(403,'Зөвшөөрөлгүй хүсэлт.');}
 export async function admin(){
  const h=await headers(),token=sessionToken(h.get('cookie'));
  if(!token)throw new ApiError(401,'Админы нэр, нууц үгээрээ нэвтэрнэ үү.');
@@ -18,6 +19,7 @@ export async function admin(){
 export async function expireHolds(){
  const db=database(),now=Date.now();
  await db.batch([
+  db.prepare("SELECT id FROM applications WHERE status='pending' AND expires_at<? FOR UPDATE").bind(now),
   db.prepare("DELETE FROM reservations WHERE application_id IN (SELECT id FROM applications WHERE status='pending' AND expires_at<?)").bind(now),
   db.prepare("UPDATE applications SET status='expired',updated_at=? WHERE status='pending' AND expires_at<?").bind(now,now),
  ]);

@@ -1,3 +1,5 @@
+export const runtime='nodejs';
+export const dynamic='force-dynamic';
 import {database,expireHolds,respond,fail,ApiError} from '@/lib/server';
 import {priceFor,tariffFor} from '@/lib/expo';
 export async function GET(req:Request){try{

@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 const origin=process.argv[2]||'http://127.0.0.1:4173';
 assert(['127.0.0.1','localhost','terminal.local'].includes(new URL(origin).hostname),'Integration tests are local-only.');
 let owner={};
-const qaPassword=process.env.QA_ADMIN_PASSWORD;assert(qaPassword,'Run the isolated Worker test harness to supply ephemeral test credentials.');
+const qaPassword=process.env.QA_ADMIN_PASSWORD;assert(qaPassword,'Run the isolated Node.js test harness to supply ephemeral test credentials.');
 async function request(path,init={}){const response=await fetch(origin+path,init);const data=await response.json();return {response,data};}
 const content={company:'QA туршилтын байгууллага',chapter:'QA Chapter',sector:'Технологи',description:'Зөвхөн local орчинд шалгах туршилтын байгууллагын танилцуулга.',audience:'B2B + B2C',contact:'QA хэрэглэгч',position:'QA',phone:'99990000',email:'qa@example.invalid',website:'https://example.com',notes:'Туршилтын өгөгдөл',consent:true,honeypot:'',meetings:[{company:'QA түнш',person:'QA хүн',goal:'Хамтын ажиллагаа ярилцах'}]};
 const logo=await readFile(new URL('../public/assets/logo.png',import.meta.url));

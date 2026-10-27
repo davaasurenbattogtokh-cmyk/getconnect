@@ -4,102 +4,76 @@
 **Organizer:** BNI NEXUS  
 **Repository:** https://github.com/davaasurenbattogtokh-cmyk/getconnect
 
-Vinext/React website with Cloudflare D1 records and R2 logo uploads. The complete frontend, API routes, administrator login, uploaded-logo handling, database schema/migrations and source assets are included. This application requires a Worker runtime, D1 and R2; deploying the frontend alone will not provide registration or administration.
+Production Next.js application for **Hostinger Business/Cloud Node.js hosting**, using the plan's MySQL database. Registration, booth reservations, approvals/cancellations, admin sessions, settings, email outbox and uploaded logos are durable MySQL records. No Cloudflare account, D1, R2, Worker emulator or filesystem uploads are required.
 
-## Run locally
+## Hostinger deployment
 
-Use Node.js >=22.13 and the pnpm version in `package.json`.
+1. In hPanel, open **Websites → Dashboard → Databases → Management**. Create a MySQL database and its user. Copy the **full names including Hostinger's prefix**, and save the database password privately. This password is different from the application-admin password.
+2. Connect this GitHub repository, branch **main**, as a **Next.js** Node.js application. Use these settings:
+
+   | Setting | Value |
+   | --- | --- |
+   | Node.js | 22.x (at least 22.13) or 24.x |
+   | Root directory | Repository root (`.`) |
+   | Build command | `npm run build` |
+   | Start command | `npm run start` |
+   | Build output directory, if requested | `.next` |
+
+   A `pnpm-lock.yaml` is included for reproducible pnpm installation. Use the package manager detected by Hostinger. Do not use a static/Vite deployment preset; API routes require a running Node.js server. The start script honors the hosting provider's `PORT`; do not add a fixed `PORT` value in hPanel.
+
+3. Add the following environment values in hPanel. Paste **values only, without surrounding quotes**:
+
+   | Key | Value |
+   | --- | --- |
+   | `ADMIN_USERNAME` | `admin` |
+   | `ADMIN_PASSWORD_HASH` | Full PBKDF2 hash generated with `pnpm admin:hash` or `npm run admin:hash`; never the plaintext password |
+   | `APP_URL` | `https://getconnect.business` |
+   | `DB_HOST` | `127.0.0.1` |
+   | `DB_PORT` | `3306` |
+   | `DB_NAME` | Actual full database name, e.g. `u123456789_getconnect` (example only) |
+   | `DB_USER` | Actual full database username from hPanel |
+   | `DB_PASSWORD` | Password assigned to that database user |
+   | `RESEND_API_KEY` | Your Resend sending key; optional until email setup is complete |
+   | `MAIL_FROM` | Example: `BNI NEXUS <noreply@getconnect.business>`, after verifying that domain in Resend |
+
+   Remove obsolete `EXPO_D1_DATABASE_ID`, `EXPO_D1_DATABASE_NAME` and `EXPO_R2_BUCKET_NAME` fields. They are not used by this version. Keep secret values in hPanel, never GitHub.
+
+4. Deploy/redeploy. On the first API request the app creates its missing tables with additive `CREATE TABLE IF NOT EXISTS` statements. The database user must have CREATE access to its own database. Existing records are not deleted. Alternatively, import `db/schema.sql` with phpMyAdmin before opening registration, or run `npm run db:migrate` with the database environment configured.
+5. Attach the real domain in hPanel and ensure HTTPS is enabled. `APP_URL` must match the origin visitors actually use, including `www` if used; it controls request-origin validation, secure admin cookies and email status links. If testing a temporary Hostinger subdomain, temporarily use its HTTPS URL, then restore the real domain when connected.
+6. Open `/admin/login` (or **Admin** in the footer). Sign in with the username and password corresponding to the configured hash. Enter public contact details and any additional chapter suggestions.
+7. Verify the full workflow on the actual host: register → pending hold → approve → logo appears on map and in directory → confirmation email → cancel with reason → booth available again. A successful source push/build alone does not prove live database, DNS or email configuration.
+
+Official references: [Hostinger Node.js deployment](https://www.hostinger.com/support/how-to-deploy-a-nodejs-website-in-hostinger/), [Hostinger MySQL connection](https://www.hostinger.com/support/connecting-a-hostinger-mysql-database-to-a-node-js-application/).
+
+## Data and behavior
+
+- Multiple selected booths are reserved in **one InnoDB transaction**. Unique booth keys prevent double booking; any conflict rolls the complete request back. Deadlocks retry the transaction, not individual statements.
+- Pending holds last 48 hours. Availability reads and admin decisions reconcile expired holds. Approval publishes the organization and its logo; rejection/cancellation frees booths. A cancellation/rejection reason is required. Audit entries and email-outbox records are part of the same guarded decision transaction.
+- A chapter is mandatory **before selecting the map**. BNI NEXUS and the 14 confirmed regional chapters receive 200,000 MNT/m²; other chapters receive 350,000 MNT/m². Sponsor packages remain 20,000,000 MNT. The server computes and saves the quote, ignoring submitted prices.
+- Logos must be PNG/JPG/WebP, maximum 5 MB. Their binary data is stored in packet-safe 256 KiB database chunks, so restarts and source redeployments do not delete uploads. Include these tables in database backups. Unapproved logos require an admin session. Private contacts and 1:1 wishes are not returned by the public exhibitor API.
+- Logo storage uses the MySQL quota: allow approximately 510 MB for 102 maximum-size logos, plus application data and backups. Actual typical logos are much smaller. Keep the plan's database backups enabled.
+- Admin passwords use PBKDF2-SHA256 with 100,000 iterations and a random salt. The repository contains no actual password/hash. Sessions are random 256-bit tokens, stored only as SHA-256 hashes in MySQL, with 8-hour expiry, HttpOnly/SameSite=Strict cookies and Secure cookies when `APP_URL` is HTTPS. Logout revokes the session. Failed logins have an atomic per-IP 15-minute rate limit. Hostinger must overwrite/maintain trusted proxy `X-Forwarded-For` headers.
+- Resend is optional until configured. Without its key and verified sender, mail stays **pending**, and admin reports mail as unconfigured. Delivery failure does not undo registration/approval; admin can retry pending/failed messages. Provider requests have stable idempotency keys. No background daemon is required.
+- The map has 100 numbered booths and two sponsor booths, with overhead subtle 3D blocks, multi-booth organization logos, hover information and exhibitor details. Registration includes mandatory desired 1:1 organization/person/goal.
+
+This is a new, independent Hostinger database. Source export does **not** copy any live records, sessions, secret values or uploads from another hosting provider. Importing old production data would be a separate, explicit migration.
+
+## Local development and verification
+
+Use Node.js >=22.13.0 and the pnpm version in `package.json`:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm build
-# Apply each SQL file in drizzle/ to the local D1 database, in filename order:
-pnpm exec wrangler d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_fearless_red_wolf.sql
-pnpm exec wrangler d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_old_human_fly.sql
-pnpm exec wrangler d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0002_even_masked_marvel.sql
-pnpm exec wrangler d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0003_tranquil_satana.sql
+# Set local values from .env.example in an ignored .env.local file.
 pnpm dev
+pnpm build
+pnpm start
 ```
 
-Set local runtime values in an untracked `.dev.vars` file using the key names from `.env.example`. Generate a password hash with `pnpm admin:hash`; the password input is hidden. Never commit the resulting local secrets file.
+`pnpm admin:hash` reads a password through hidden input and prints its hash. `pnpm db:migrate` uses environment values from the shell; with Node 22+, `.env.local` can be loaded with `node --env-file=.env.local scripts/migrate.mjs`.
 
-## Routes
+`pnpm check` checks types. `pnpm test:integration` requires a **local** MySQL/MariaDB server and `DB_HOST=127.0.0.1`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` exported. The test user needs permission to create and drop a fresh `getconnect_qa_*` database. The harness refuses non-local hosts, creates its own random database and credentials, runs the production Next.js server, tests authentication, registration, all tariff chapters, transaction conflicts, cancellation, logo access, 5 MB uploads, process restart durability and rate limiting, then removes only its own test database. It never sends real email or accesses the configured production `DB_NAME`.
 
-- `/`: expo introduction, four generated hero scenes, pointer-reactive globe, program and FAQ.
-- `/exhibitors`: overhead interactive 3D-block floor plan, multi-booth selection, approved exhibitors and filters.
-- `/register`: four-step application with chapter selected before the map, chapter-based pricing, mandatory logo, contact and one-to-one meeting interests.
-- `/status?token=...`: private unguessable application-status link.
-- `/admin`: password-authenticated administration, approval, rejection, cancellation, hold extension, CSV, mail outbox, contact settings and chapters.
+## Assets and identity
 
-## Configuration
-
-The Vite/Cloudflare configuration declares the `DB` and `BUCKET` bindings for local development. Schema migrations live under `drizzle/`. The production preparation script supplies the identifiers of your own provisioned resources.
-
-Application administration uses the explicit username/password login at `/admin/login`; Footer **Admin** opens it. Runtime secrets `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` configure credentials. The password hash format is `pbkdf2-sha256$100000$<32-hex-salt>$<64-hex-hash>`. Passwords never appear in source or browser bundles.
-
-Authenticated sessions use random 256-bit tokens; D1 stores only SHA-256 token hashes, with an eight-hour expiry. Cookies are HttpOnly, SameSite=Strict, host-only and Secure on HTTPS. Logout revokes the stored session. Login attempts are limited to ten per fifteen-minute IP window. Every protected API authorizes the session server-side; platform identity alone never grants application-admin permissions.
-
-Transactional email uses Resend over HTTPS. Configure the runtime secrets `RESEND_API_KEY` and `MAIL_FROM` (a verified sender), then redeploy. The outbox truthfully remains pending until configured. The admin can retry delivery. Email requests carry stable idempotency keys; notification failure never rolls back registration or approval.
-
-Public contact details and additional standard-rate chapter suggestions are editable in admin. BNI Nexus and the 14 confirmed regional chapters receive 200,000 MNT/m²; all others receive 350,000 MNT/m². Both map entry points require a selected chapter. The server computes and saves the unit rate and total independently from client-submitted prices. Sponsor packages remain 20,000,000 MNT. No names, exhibitors or testimonials were invented. The directory starts empty. At least one nonempty chapter must always be supplied, even before the organizer fills the suggestion list.
-
-Temporary holds last 48 hours. Availability requests and decisions reconcile expired holds. Selection alone never reserves inventory. Requests acquire all selected booth IDs atomically in a D1 batch; unique booth keys prevent double booking. Reject/cancel frees inventory and removes the public listing atomically. Private contact email and meeting wishes never appear in public exhibitor API responses.
-
-## Validation
-
-`node node_modules/typescript/bin/tsc --noEmit`
-
-`node tests/run-worker.mjs` (isolated D1/R2 Worker integration suite)
-
-`node tests/integration.mjs http://127.0.0.1:4173` (optional HTTP test runner)
-
-The integration script refuses non-local destinations. The isolated Worker harness creates ephemeral test-only credentials and tests password login, session revocation, rate limiting and the registration workflow; local and hosted databases are separate. It does not send real mail.
-
-The built asset `participant-kit-web.pdf` is a web-optimized copy of the supplied participant kit. Official supplied logos retain their original artwork. Hero scenes and the illustrative map preview are AI concepts; the selectable map is authored SVG with the source plan's booth coordinates, 100 numbered booths and two sponsor booths.
-
-## Independent production deployment: getconnect.business
-
-This repository contains application source and schema only, not live participant records, uploaded logos or secret values. A new deployment requires its own database, file bucket and runtime secrets. Changing source metadata does not change DNS or activate the domain.
-
-The current backend is designed for Cloudflare Workers with D1 and R2. A conventional PHP-only shared host or GitHub Pages cannot run the API as-is. A different server requires a backend/storage adaptation.
-
-For an independent Cloudflare deployment:
-
-1. Add `getconnect.business` to your Cloudflare account and activate its zone. Authenticate Wrangler in that account.
-2. Create the production resources and retain the returned real D1 database ID:
-
-   ```sh
-   pnpm exec wrangler d1 create getconnect-business
-   pnpm exec wrangler r2 bucket create getconnect-business-logos
-   ```
-
-3. Build the app, then prepare the production config with the resource ID from step 2. The following environment values are non-secret identifiers; replace `YOUR_D1_DATABASE_ID` with the provider's returned ID:
-
-   ```sh
-   pnpm build
-   EXPO_D1_DATABASE_ID=YOUR_D1_DATABASE_ID EXPO_R2_BUCKET_NAME=getconnect-business-logos pnpm deploy:prepare
-   ```
-
-   This writes an ignored `dist/server/wrangler.production.json`. It preserves the verified build's modules and assets, declares the real DB/BUCKET bindings and configures the `getconnect.business` custom domain. It does not deploy or change DNS by itself.
-
-4. Apply the schema to the new database:
-
-   ```sh
-   pnpm exec wrangler d1 migrations apply DB --remote --config dist/server/wrangler.production.json
-   ```
-
-5. Deploy the Worker, and configure runtime secrets through Wrangler's hidden prompts (or the Cloudflare dashboard). Use the generated hash from `pnpm admin:hash` for `ADMIN_PASSWORD_HASH`; do not paste the plaintext password as the hash:
-
-   ```sh
-   pnpm exec wrangler deploy --config dist/server/wrangler.production.json
-   pnpm exec wrangler secret put ADMIN_USERNAME --config dist/server/wrangler.production.json
-   pnpm exec wrangler secret put ADMIN_PASSWORD_HASH --config dist/server/wrangler.production.json
-   pnpm exec wrangler secret put RESEND_API_KEY --config dist/server/wrangler.production.json
-   pnpm exec wrangler secret put MAIL_FROM --config dist/server/wrangler.production.json
-   ```
-
-   Use `admin` as the configured username. The password itself is intentionally not stored in this repository. The email service requires a verified sender. Before opening registration, complete the runtime configuration, verify HTTPS on the custom domain and run the complete register → approve → logo publication → email → cancel flow.
-
-6. In `/admin/login`, sign in and enter the public contact information and additional chapter suggestions. The public website uses the application-admin password to protect organizer functions.
-
-Production references: [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/) and [Worker custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
+Official supplied logos retain their artwork; Montserrat includes its OFL license. Hero scenes and the map teaser are AI concepts. `participant-kit-web.pdf` is the web-optimized participant kit. Event: **2026.11.20–22 · Мишээл Экспо**. Organizer: **BNI NEXUS**.

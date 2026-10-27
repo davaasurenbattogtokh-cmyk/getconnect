@@ -1,5 +1,7 @@
+export const runtime='nodejs';
+export const dynamic='force-dynamic';
 import {z} from 'zod';
-import {database,bucket,expireHolds,respond,fail,ApiError,sameOrigin,deliverMail} from '@/lib/server';
+import {database,bucket,expireHolds,respond,fail,ApiError,sameOrigin,requestOrigin,deliverMail} from '@/lib/server';
 import {boothById,canonicalChapter,validChapter,tariffFor,priceFor} from '@/lib/expo';
 const dataSchema=z.object({company:z.string().trim().min(2).max(150),chapter:z.string().trim().min(2).max(100),sector:z.string().trim().min(2).max(100),description:z.string().trim().min(10).max(1200),audience:z.enum(['B2B','B2C','B2B + B2C']),contact:z.string().trim().min(2).max(100),position:z.string().trim().max(100),phone:z.string().trim().regex(/^[+\d\s()-]{8,25}$/),email:z.string().trim().email().max(150),website:z.string().trim().max(300).refine(s=>!s||/^https?:\/\//i.test(s),'Холбоос https:// гэж эхэлнэ.'),booths:z.array(z.string()).min(1).max(102),meetings:z.array(z.object({company:z.string().trim().min(2).max(150),person:z.string().trim().min(2).max(100),goal:z.string().trim().min(2).max(500)})).min(1).max(20),notes:z.string().trim().max(1200),consent:z.literal(true),honeypot:z.string().max(0)});
 export async function POST(req:Request){let logoKey='';try{
@@ -20,6 +22,6 @@ export async function POST(req:Request){let logoKey='';try{
  ...d.booths.map(b=>db.prepare('INSERT INTO reservations(booth_id,application_id) VALUES(?,?)').bind(b,id)),
  db.prepare('INSERT INTO mail_outbox(id,application_id,kind,recipient,status,error,created_at) VALUES(?,?,?,?,?,?,?)').bind(mailId,id,'received',d.email.toLowerCase(),'pending','',now),
  db.prepare('INSERT INTO audit(id,application_id,actor,action,detail,at) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,'applicant','submitted',d.booths.join(', '),now),
- ]);}catch(e){if(String(e).includes('UNIQUE'))throw new ApiError(409,'Сонгосон талбайд өөр хүсэлт бүртгэгдсэн байна. Map-аа шинэчилж дахин сонгоно уу.');throw e;}
- logoKey='';await deliverMail(mailId,new URL(req.url).origin);return respond({id,token,status:'pending',expiresAt:expires,chapter:d.chapter,ratePerSqm,totalPrice},201);
+ ]);}catch(e){if((e as {code?:string}).code==='ER_DUP_ENTRY')throw new ApiError(409,'Сонгосон талбайд өөр хүсэлт бүртгэгдсэн байна. Map-аа шинэчилж дахин сонгоно уу.');throw e;}
+ logoKey='';await deliverMail(mailId,requestOrigin(req));return respond({id,token,status:'pending',expiresAt:expires,chapter:d.chapter,ratePerSqm,totalPrice},201);
 }catch(e){if(logoKey)try{await bucket().delete(logoKey);}catch{}return fail(e);}}
